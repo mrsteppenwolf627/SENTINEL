@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import List, Optional, Callable
 from ...core.entities import Alert, Diagnosis, ActionType
 
@@ -18,10 +19,12 @@ class Rule:
         return self.condition(alert)
 
     def create_diagnosis(self, alert: Alert) -> Diagnosis:
+        # Use a defaultdict so missing metadata keys render as "N/A" instead of raising KeyError.
+        safe_metadata = defaultdict(lambda: "N/A", alert.metadata)
         return Diagnosis(
             alert_id=alert.id,
-            root_cause=self.root_cause_template.format(**alert.metadata),
-            confidence=1.0, # Rules are deterministic in this MVP
+            root_cause=self.root_cause_template.format_map(safe_metadata),
+            confidence=1.0,  # Rules are deterministic in this MVP
             suggested_actions=self.suggested_actions
         )
 

@@ -1,6 +1,6 @@
 import logging
 import sys
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger import json as jsonlogger
 from .config import settings
 
 def setup_logging():

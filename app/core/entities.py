@@ -1,6 +1,6 @@
 from enum import Enum
-from typing import Dict, Any, Optional, List
-from datetime import datetime
+from typing import Dict, Any, Optional, List, Literal
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 import uuid
 
@@ -26,7 +26,7 @@ class ActionType(str, Enum):
 class Alert(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     source: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     severity: AlertSeverity
     message: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -43,11 +43,23 @@ class RemediationPlan(BaseModel):
     action_type: ActionType
     risk_level: RiskLevel
     requires_approval: bool
-    status: str = "PENDING"  # PENDING, APPROVED, EXECUTED, FAILED
+    status: Literal["PENDING", "APPROVED", "EXECUTED", "FAILED"] = "PENDING"
     
+class Incident(BaseModel):
+    """Represents an ongoing or historical incident derived from an alert."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    alert_id: str
+    source: str
+    severity: AlertSeverity
+    message: str
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    status: Literal["OPEN", "ANALYZING", "MITIGATING", "CLOSED"] = "OPEN"
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    closed_at: Optional[datetime] = None
+
 class AuditLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     component: str
     event: str
     details: Dict[str, Any]

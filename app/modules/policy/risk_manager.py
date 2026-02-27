@@ -31,8 +31,8 @@ class RiskEvaluator(IPolicyModule):
         if risk_level == RiskLevel.SAFE:
             requires_approval = False
         elif risk_level == RiskLevel.MODERATE:
-            # Check config for auto-approval
-            requires_approval = not settings.AUTO_APPROVE_SAFE_ACTIONS
+            # Check config for auto-approval of moderate-risk actions
+            requires_approval = not settings.AUTO_APPROVE_MODERATE_ACTIONS
         elif risk_level == RiskLevel.CRITICAL:
             requires_approval = True
             

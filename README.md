@@ -1,6 +1,6 @@
 # 🛡️ Sentinel
 
-**Tu Agente Autónomo de Infraestructura (MVP v1.0)**
+**Agente Autónomo de Infraestructura — v2.0-dev (Phase 2)**
 
 > *Un sistema inteligente que vigila tus servidores, diagnostica problemas y los arregla antes de que te despierten a las 3 A.M.*
 
@@ -8,78 +8,116 @@
 
 ## 🌟 ¿Qué es Sentinel?
 
-Sentinel es un "guardián digital" para sistemas informáticos. Imagina que tienes un ingeniero experto monitoreando tus servidores las 24 horas del día, listo para actuar en milisegundos si algo falla. Eso es Sentinel.
+Sentinel es un "guardián digital" para sistemas informáticos. Funciona como un ingeniero experto monitoreando tus servidores las 24 horas del día, listo para actuar en milisegundos si algo falla.
 
-En esta versión MVP (Producto Mínimo Viable), Sentinel puede:
-1.  **Escuchar**: Detecta alertas simuladas como "CPU al 100%" o "Disco lleno".
-2.  **Pensar**: Analiza por qué ocurrió el problema usando un motor de reglas lógico.
-3.  **Decidir**: Evalúa si es peligroso actuar automáticamente o si debe pedir permiso humano.
-4.  **Actuar**: Ejecuta la solución (reiniciar un servicio, borrar caché, etc.).
-5.  **Recordar**: Guarda un registro auditor de todo lo que hizo.
-
----
-
-## 🚀 Guía Rápida para "No Expertos"
-
-Si solo quieres ver cómo funciona la magia:
-
-1.  **Instala los requisitos**: Asegúrate de tener Python instalado.
-    ```bash
-    pip install -r requirements.txt
-    ```
-2.  **Enciende a Sentinel**:
-    ```bash
-    uvicorn app.main:app --reload
-    ```
-3.  **Observa**: 
-    Abre tu navegador en `http://127.0.0.1:8000/audit`. Verás una lista en vivo de problemas que aparecen y cómo Sentinel los resuelve.
+Sentinel puede:
+1. **Escuchar**: Detecta alertas simuladas como "CPU al 100%" o "Disco lleno".
+2. **Pensar**: Analiza por qué ocurrió el problema usando un motor de reglas lógico.
+3. **Decidir**: Evalúa si es peligroso actuar automáticamente o si debe pedir permiso humano.
+4. **Actuar**: Ejecuta la solución (reiniciar un servicio, borrar caché, escalar instancias).
+5. **Recordar**: Guarda un registro auditor completo — en archivo JSONL o en PostgreSQL.
 
 ---
 
-## 🔧 Documentación Técnica
+## 🚀 Inicio Rápido
 
-Para desarrolladores e ingenieros que quieran extender el sistema.
-
-### Arquitectura Modular
-Sentinel no es un script monolítico; es un sistema modular diseñado para crecer.
-
-*   **Ingestion (`app/modules/ingestion`)**: 
-    *   Actualmente: Un simulador (`AlertSimulator`) que genera ruido estocástico.
-    *   Futuro: Webhooks para Prometheus, Datadog, AWS CloudWatch.
-*   **Analysis (`app/modules/analysis`)**:
-    *   Actualmente: Motor de reglas determinista (`RuleBasedAnalyzer`).
-    *   Futuro: Integración con LLMs (OpenAI/DeepSeek) para Root Cause Analysis (RCA) semántico.
-*   **Policy (`app/modules/policy`)**:
-    *   Matriz de riesgo configurable. Decide si una acción es `SAFE` (auto-ejecutable) o `CRITICAL` (requiere aprobación).
-*   **Action (`app/modules/action`)**:
-    *   Ejecutores abstractos. En este MVP, las acciones son "mockeadas" (logs) por seguridad.
-
-### Stack Tecnológico
-*   **Lenguaje**: Python 3.14+
-*   **API Framework**: FastAPI (Asynchronous)
-*   **Logging**: Estructurado (JSON) con `python-json-logger`
-*   **Tests**: Pytest + Pytest-Asyncio
-
-### Estructura de Carpetas
-```text
-Sentinel/
-├── app/
-│   ├── core/           # Definiciones de dominio (Entidades, Interfaces)
-│   ├── modules/        # Implementación de lógica (La "carne" del sistema)
-│   └── main.py         # Orquestador principal
-├── SENTINEL_DOCUMENTATION.md # Documentación profunda del proyecto
-└── audit.log           # Historial de decisiones (JSONL)
+### 1. Instalar dependencias
+```bash
+pip install -r requirements.txt
 ```
 
+### 2. (Opcional) Levantar base de datos PostgreSQL
+```bash
+docker-compose up -d
+alembic upgrade head
+```
+Si no tienes Docker, Sentinel funciona igual usando el log JSONL local (`audit.log`).
+
+### 3. Encender Sentinel
+```bash
+uvicorn app.main:app --reload
+```
+
+### 4. Observar en tiempo real
+Abre tu navegador en `http://127.0.0.1:8000/audit`.
+
+Verás el dashboard de auditoría con color-coding por severidad, mostrando cada alerta detectada y la decisión tomada por el agente.
+
+### 5. Inyectar una alerta manual
+```bash
+curl -X POST http://127.0.0.1:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "mi-servidor",
+    "severity": "CRITICAL",
+    "message": "Database connection refused",
+    "metadata": {"error_code": 5003}
+  }'
+```
+
+### 6. Ejecutar tests
+```bash
+pytest -v
+```
+Resultado esperado: **3 passed, 0 warnings**.
+
 ---
 
-## 🔮 El Futuro (Roadmap)
+## 🔧 Endpoints de la API
 
-Este repositorio (`Sentinel_MPV_V1`) es la base fundacional. Las próximas versiones incluirán:
-*   [ ] Conexión real a servidores vía SSH/Ansible.
-*   [ ] "Cerebro" basado en IA para entender logs complejos.
-*   [ ] Interfaz gráfica (Dashboard) en React.
-*   [ ] Base de datos persistente (PostgreSQL).
+| Endpoint | Método | Descripción |
+| :--- | :--- | :--- |
+| `/` | GET | Estado del sistema y módulos activos |
+| `/docs` | GET | Swagger UI interactivo |
+| `/audit` | GET | Dashboard HTML de los últimos 50 eventos |
+| `/simulate` | POST | Inyección manual de una alerta |
 
 ---
-*Hecho con ❤️ y Python.*
+
+## 🏗️ Arquitectura
+
+```
+AlertSimulator ──► RuleBasedAnalyzer ──► RiskEvaluator ──► ActionExecutor
+                                                                   │
+                                                            IAuditModule
+                                                           /            \
+                                                   AuditService    PostgresAuditService
+                                                   (audit.log)      (PostgreSQL)
+```
+
+Cada componente implementa una interfaz abstracta definida en `app/core/interfaces.py`, lo que permite reemplazar cualquier pieza sin afectar al resto del sistema.
+
+La infraestructura de base de datos vive en `app/infrastructure/database/` y es completamente opaca para el núcleo de la aplicación.
+
+### Lógica de Riesgo
+
+| Nivel | Acción | Comportamiento |
+| :--- | :--- | :--- |
+| `SAFE` | NOTIFICATION, CLEAR_CACHE | Auto-ejecuta siempre |
+| `MODERATE` | RESTART_SERVICE, SCALE_UP, BLOCK_IP | Auto-ejecuta si `AUTO_APPROVE_MODERATE_ACTIONS=True` |
+| `CRITICAL` | MANUAL_INTERVENTION | Siempre requiere aprobación humana |
+
+---
+
+## 🔮 Roadmap
+
+| Fase | Descripción | Estado |
+| :--- | :--- | :--- |
+| MVP 1.1 | Pipeline completo con motor de reglas, auditoría JSONL y API | ✅ Completo |
+| Fase 2a | Capa de persistencia: SQLAlchemy + Alembic + Docker Compose | ✅ Completo |
+| Fase 2b | LLM Brain (Claude API + LangChain) + LangGraph Orchestration | ⏳ Próximo |
+| Fase 2c | Webhook Ingestion + Human Approval Workflow | ⏳ Próximo |
+| Fase 3 | Ejecutores reales (SSH, K8s), Slack/PagerDuty, Dashboard React | 🔮 Futuro |
+
+---
+
+## 🗂️ Documentación Adicional
+
+- [`SENTINEL_DOCUMENTATION.md`](./SENTINEL_DOCUMENTATION.md) — Arquitectura técnica profunda, modelos de dominio y guía para desarrolladores.
+- [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md) — Memoria del proyecto: historial de sesiones, decisiones de arquitectura y próximos pasos.
+- [`RESUMEN_PROYECTO.md`](./RESUMEN_PROYECTO.md) — Resumen ejecutivo del estado actual.
+- [`CLAUDE_STATUS.md`](./CLAUDE_STATUS.md) — Auditoría completa del codebase con issues identificados y resueltos.
+
+---
+
+*Hecho con Python, FastAPI y SQLAlchemy.*

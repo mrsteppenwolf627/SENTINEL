@@ -32,7 +32,7 @@ class ActionExecutor(IActionModule):
             elif plan.action_type == ActionType.BLOCK_IP:
                 logger.info("Firewall rule added (Mock)")
             elif plan.action_type == ActionType.NOTIFICATION:
-                logger.info("Slac/Email sent (Mock)")
+                logger.info("Slack/Email sent (Mock)")
             elif plan.action_type == ActionType.MANUAL_INTERVENTION:
                 logger.info("Ticket created in Jira (Mock)")
             

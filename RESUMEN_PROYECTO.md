@@ -1,48 +1,81 @@
 # 📊 Resumen Ejecutivo del Proyecto: Sentinel
 
-**Fecha de actualización:** 26 de Febrero de 2026
-**Versión Actual:** MVP 1.0
+**Fecha de actualización:** 27 de Febrero de 2026
+**Versión Actual:** 2.0-dev — Phase 2 (Persistence Layer)
+
+---
 
 ## 🎯 ¿Qué es Sentinel?
-Sentinel es un sistema de agente autónomo diseñado para la gestión y auto-remediación de incidentes de infraestructura. Actúa como un "ingeniero de guardia" virtual que detecta, diagnostica y resuelve problemas en servidores de forma autónoma, pidiendo ayuda humana solo cuando es estrictamente necesario debido al riesgo de la acción.
+Sentinel es un sistema de agente autónomo diseñado para la gestión y auto-remediación de incidentes de infraestructura. Actúa como un "ingeniero de guardia" virtual que detecta, diagnostica y resuelve problemas en servidores de forma autónoma, pidiendo ayuda humana solo cuando el riesgo de la acción lo requiere.
 
 ---
 
-## ✅ Lo que se ha completado hasta ahora (MVP 1.0)
+## ✅ Fase 1 — MVP 1.1 (Foundation Hardened) — Completado
 
-El Producto Mínimo Viable (MVP) está completamente implementado, con una arquitectura modular y funcional. Se ha construido el flujo completo "End-to-End" pero funcionando de manera simulada/mockeada para asentar las bases del sistema.
+El Producto Mínimo Viable está completamente implementado. Pasó por una sesión de **hardening** que eliminó todos los errores de cimentación antes de avanzar.
 
-### 1. Arquitectura Base y Entorno
-- Se ha definido una **arquitectura modular estricta** (Ingestion, Analysis, Policy, Action, Audit).
-- Se ha configurado el entorno con Python 3.11+, FastAPI y pruebas automáticas con Pytest.
-- Implementación de **Logging Estructurado en formato JSON** para una mejor trazabilidad.
+### Módulos Implementados
+- **Ingestion:** `AlertSimulator` — genera 5 escenarios de alertas reales (CPU, Memoria, Disco, Latencia, DB).
+- **Analysis:** `RuleBasedAnalyzer` — 4 reglas deterministas con formateo seguro de metadata (sin riesgo de KeyError).
+- **Policy:** `RiskEvaluator` — matriz Safe/Moderate/Critical. Flag `AUTO_APPROVE_MODERATE_ACTIONS` correctamente nombrado.
+- **Action:** `ActionExecutor` — ejecutor mockeado que simula y registra acciones sin tocar infraestructura real.
+- **Audit (JSONL):** `AuditService` — persistencia asíncrona en `audit.log` formato JSONL.
+- **Orquestación:** Loop asíncrono no bloqueante gestionado por el `lifespan` de FastAPI.
 
-### 2. Módulos Implementados
-- **Ingestion (Ingesta):** Se creó un simulador (`AlertSimulator`) que genera alertas técnicas comunes en tiempo real (ej. "CPU al 100%", "Disco lleno").
-- **Analysis (Análisis):** Implementación de un motor determinista (`RuleBasedAnalyzer`) que procesa las alertas usando reglas predefinidas y sugiere un diagnóstico y una acción de remediación.
-- **Policy (Políticas de Riesgo):** Se incorporó una matriz de riesgo (`RiskEvaluator`) que clasifica la acción sugerida en niveles de riesgo (`SAFE`, `CRITICAL`), determinando si la acción puede ejecutarse automáticamente o requiere aprobación.
-- **Action (Acción):** Se construyó un ejecutor (`ActionExecutor`) que actualmente "mockea" (simula y registra en log) las acciones para evitar alteraciones reales por motivos de seguridad en esta fase.
-- **Audit (Auditoría):** Todo el proceso de toma de decisiones del agente queda guardado de manera local y persistente en `audit.log`.
-- **Orquestación Principal:** Un bucle asíncrono no bloqueante configurado dentro de la aplicación principal que orquesta el ciclo de vida continuo del agente.
-
-### 3. Interfaz y Experiencia
-- **Dashboard de UI (Básico):** Disponibilidad de un endpoint web (`/audit`) que expone el historial y las decisiones tomadas por el agente.
-- **API REST:** Endpoint habilitado (`/simulate`) para la inyección manual de alertas mediante peticiones HTTP.
-
-### 4. Documentación
-Se han estructurado los siguientes documentos clave en el repositorio:
-- `README.md`: Instrucciones de uso rápido, alcance y ejecución del proyecto.
-- `PROJECT_CONTEXT.md`: Archivo de contexto general, decisiones técnicas y estado de los "sprints" diseñado como memoria central para agentes e ingenieros.
-- `SENTINEL_DOCUMENTATION.md`: Documentación técnica profunda que explica cómo funciona el pipeline de datos, la estructura de carpetas y el diseño de los módulos.
+### Calidad del Código (MVP 1.1)
+| Métrica | Estado |
+| :--- | :--- |
+| Tests | ✅ 3/3 passing |
+| Deprecation warnings | ✅ 0 |
+| Imports rotos | ✅ 0 |
+| Typos en código | ✅ 0 |
+| Tipos sin validar | ✅ 0 (status tipado como Literal) |
 
 ---
 
-## 🚀 Próximos Pasos en el Roadmap estratégico
+## 🔄 Fase 2 — Brain & Persistence (En Progreso)
 
-La siguiente fase se orienta a convertir el MVP en una solución robusta lista para interactuar con sistemas reales:
+### Completado en esta fase
 
-1. **Capa de Persistencia Robusta:** Migrar de persistencia en archivo (`audit.log`) a una **Base de Datos** real (SQL/PostgreSQL) para permitir búsquedas eficientes y manejo empresarial.
-2. **Análisis Cognitivo (Integración LLM):** Sustituir el actual motor rígido de reglas por un "cerebro" basado en IA Generativa (OpenAI/DeepSeek, etc.) que analice problemas y haga verdadero Análisis de Causa Raíz (RCA).
-3. **Ingesta Real de Alertas:** Crear Webhooks reales para escuchar incidentes nativos desde sistemas de monitoreo de producción (ej. Prometheus, Datadog).
-4. **Desarrollo Frontend:** Construir un Dashboard en **React** donde el usuario pueda revisar las pausas de seguridad e interactuar con el agente asíncronamente.
-5. **Ejecutores Conectados:** Empezar a programar acciones reales a través de conexiones SSH automatizadas o APIs de nube reales.
+#### Capa de Persistencia (Session 3)
+- **Entidad `Incident`** añadida a `app/core/entities.py` — ciclo de vida `OPEN → ANALYZING → MITIGATING → CLOSED`.
+- **`app/infrastructure/database/models.py`** — Modelos SQLAlchemy: `IncidentModel`, `RemediationPlanModel`, `AuditLogModel`. Todos usan `datetime.now(timezone.utc)`.
+- **`app/infrastructure/database/repositories.py`** — Repositorios domain-pure: aceptan y devuelven entidades Pydantic; el mapeo ORM es interno.
+- **`app/modules/audit/db_service.py`** — `PostgresAuditService` implementa `IAuditModule` para PostgreSQL. Coexiste con `AuditService` (JSONL).
+- **`docker-compose.yml`** — PostgreSQL 15-alpine con healthcheck y volumen persistente.
+- **`alembic/`** — Setup async completo. Migración inicial lista (`incidents`, `remediation_plans`, `audit_logs`).
+- **`requirements.txt`** — Añadidas 5 dependencias: `sqlalchemy`, `alembic`, `asyncpg`, `aiosqlite`, `psycopg2-binary`.
+
+### Pendiente en esta fase
+- **LLM Brain:** Integrar Claude API + LangChain en un nuevo `LLMAnalyzer`.
+- **LangGraph Orchestration:** Refactorizar el loop en un grafo de agente.
+- **Webhook Ingestion:** Endpoint para Prometheus Alertmanager / Grafana / Datadog.
+- **Human Approval Workflow:** POST /plans/{id}/approve y /plans/{id}/reject.
+
+---
+
+## 🏛️ Stack Tecnológico
+
+| Capa | Tecnología | Estado |
+| :--- | :--- | :--- |
+| API Framework | FastAPI + Uvicorn | ✅ En uso |
+| Data Models | Pydantic V2 | ✅ En uso |
+| Logging | python-json-logger | ✅ En uso |
+| Tests | Pytest + pytest-asyncio | ✅ En uso |
+| ORM / Migraciones | SQLAlchemy 2.0 + Alembic | ✅ Implementado (Fase 2) |
+| Base de datos | PostgreSQL 15 (Docker) | ✅ Configurado (Fase 2) |
+| Async DB driver | asyncpg + aiosqlite | ✅ Instalado (Fase 2) |
+| LLM Orchestration | LangGraph | ⏳ Fase 2 |
+| LLM Integration | LangChain + Anthropic Claude | ⏳ Fase 2 |
+| Event Streaming | Redis | ⏳ Fase 3 |
+| Monitoring Ingestion | Prometheus Client | ⏳ Fase 2 |
+
+---
+
+## 📁 Documentación
+
+- `README.md`: Guía rápida de usuario con instrucciones Docker.
+- `PROJECT_CONTEXT.md`: Memoria central para agentes e ingenieros (historial de sesiones + roadmap).
+- `SENTINEL_DOCUMENTATION.md`: Documentación técnica profunda con pipeline, modelos y guía de desarrollo.
+- `CLAUDE_STATUS.md`: Auditoría inicial completa del codebase (Fase 1).
+- `PHASE_2_PERSISTENCE_DESIGN.md`: Diseño original de la capa de persistencia.
