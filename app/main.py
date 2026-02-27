@@ -3,22 +3,47 @@ import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import HTMLResponse
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from .core.config import settings
 from .core.logging import logger
 from .core.entities import Alert, AuditLog
 from .modules.ingestion import AlertSimulator
-from .modules.analysis import RuleBasedAnalyzer
+from .modules.analysis import RuleBasedAnalyzer, LLMAnalyzer
 from .modules.policy import RiskEvaluator
 from .modules.action import ActionExecutor
 from .modules.audit import AuditService
+from .modules.context import ContextBuilderService
 
-# Initialize Modules
+# ---------------------------------------------------------------------------
+# DB session factory (lazy — only connects on first use)
+# ContextBuilderService catches any connection errors gracefully.
+# ---------------------------------------------------------------------------
+_engine = create_async_engine(settings.DATABASE_URL, echo=False)
+_AsyncSessionLocal = async_sessionmaker(_engine, expire_on_commit=False)
+
+# ---------------------------------------------------------------------------
+# Module wiring
+# ---------------------------------------------------------------------------
 simulator = AlertSimulator()
-analyzer = RuleBasedAnalyzer()
 risk_evaluator = RiskEvaluator()
 executor = ActionExecutor()
 audit_service = AuditService()
+
+context_builder = ContextBuilderService(session_factory=_AsyncSessionLocal)
+
+# Choose analyzer: LLM if API key is set, otherwise rule-based fallback only.
+_rule_analyzer = RuleBasedAnalyzer()
+if settings.ANTHROPIC_API_KEY:
+    analyzer = LLMAnalyzer(
+        api_key=settings.ANTHROPIC_API_KEY,
+        model=settings.LLM_MODEL,
+        fallback_analyzer=_rule_analyzer,
+    )
+    logger.info("LLM Brain active", extra={"model": settings.LLM_MODEL})
+else:
+    analyzer = _rule_analyzer
+    logger.info("LLM Brain inactive (no ANTHROPIC_API_KEY) — using rule engine")
 
 
 async def processing_loop():
@@ -30,15 +55,18 @@ async def processing_loop():
 
 async def process_alert(alert: Alert):
     """
-    Main orchestration flow: Ingest -> Analyze -> Policy -> Action -> Audit.
+    Main orchestration flow: Ingest → EnrichContext → Analyze → Policy → Action → Audit.
     Any unhandled exception is caught and logged so the loop stays alive.
     """
     try:
         # 0. Log Ingestion
         logger.info(f"Received alert: {alert.source}", extra={"alert_id": alert.id})
 
+        # 0.5 Build enriched context (queries DB for historical incidents/plans)
+        context = await context_builder.build(alert)
+
         # 1. Analyze
-        diagnosis = await analyzer.analyze(alert)
+        diagnosis = await analyzer.analyze(context)
 
         # 2. Policy / Risk
         plan = await risk_evaluator.evaluate_risk(diagnosis)
@@ -89,6 +117,7 @@ async def root():
     """Health check endpoint — returns module list and docs link."""
     return {
         "status": "online",
+        "analyzer": type(analyzer).__name__,
         "modules": ["Ingestion", "Analysis", "Policy", "Action", "Audit"],
         "docs": "/docs",
     }

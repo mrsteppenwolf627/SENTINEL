@@ -8,8 +8,8 @@
 
 ## 📅 Last Updated
 **Date:** 2026-02-27
-**Version:** 2.0-dev (Phase 2 — Persistence Layer complete)
-**Status:** Phase 2 in progress / Persistence layer live / LLM Brain next
+**Version:** 2.0-dev (Phase 2b — LLM Brain complete)
+**Status:** Phase 2 in progress / LLM Brain live / LangGraph next
 **Repository:** [https://github.com/mrsteppenwolf627/Sentinel_MPV_V1.git](https://github.com/mrsteppenwolf627/Sentinel_MPV_V1.git)
 
 ---
@@ -19,11 +19,13 @@
 
 ### Current Capabilities (v2.0-dev)
 1. **Simulated Ingestion**: Generates fake CPU, Memory, Disk, Latency, and DB-failure alerts (`app/modules/ingestion`).
-2. **Rule-Based Analysis**: Maps alerts to diagnoses using static logic with safe metadata handling (`app/modules/analysis`).
-3. **Risk Policy**: Classifies actions as SAFE (auto), MODERATE (configurable), or CRITICAL (always requires approval).
-4. **Mocked Execution**: Logs actions instead of executing them (safety first).
-5. **Audit Trail (dual)**: JSONL file (`AuditService`) + PostgreSQL (`PostgresAuditService`) — both implement `IAuditModule`.
-6. **Persistence Layer**: SQLAlchemy 2.0 + Alembic migrations ready. Schema: `incidents`, `remediation_plans`, `audit_logs`.
+2. **LLM Brain (Primary)**: `LLMAnalyzer` calls Claude via LangChain with structured Pydantic output. Falls back to rule engine on any API error.
+3. **Rule-Based Analysis (Fallback)**: Maps alerts to diagnoses using static logic with safe metadata handling (`app/modules/analysis`).
+4. **Context Builder**: `ContextBuilderService` queries PostgreSQL for recent similar incidents and past remediations to enrich each alert before analysis.
+5. **Risk Policy**: Classifies actions as SAFE (auto), MODERATE (configurable), or CRITICAL (always requires approval).
+6. **Mocked Execution**: Logs actions instead of executing them (safety first).
+7. **Audit Trail (dual)**: JSONL file (`AuditService`) + PostgreSQL (`PostgresAuditService`) — both implement `IAuditModule`.
+8. **Persistence Layer**: SQLAlchemy 2.0 + Alembic migrations ready. Schema: `incidents`, `remediation_plans`, `audit_logs`.
 
 ---
 
@@ -47,14 +49,18 @@
 | **Action** | `app/modules/action/executors.py` | Executes `RemediationPlan` (Mocked). |
 | **Audit (JSONL)** | `app/modules/audit/service.py` | Persists logs to `audit.log` (JSONL). Kept intact. |
 | **Audit (DB)** | `app/modules/audit/db_service.py` | `PostgresAuditService` — IAuditModule adapter for PostgreSQL. |
+| **Context Builder** | `app/modules/context/builder.py` | `ContextBuilderService` — enriches Alert with DB history before analysis. |
+| **LLM Analyzer** | `app/modules/analysis/llm_analyzer.py` | `LLMAnalyzer` — Claude via LangChain, structured output, rule-engine fallback. |
 | **DB Models** | `app/infrastructure/database/models.py` | SQLAlchemy ORM: `IncidentModel`, `RemediationPlanModel`, `AuditLogModel`. |
-| **Repositories** | `app/infrastructure/database/repositories.py` | Domain-pure repos: accept/return Pydantic entities, map to ORM internally. |
-| **Main** | `app/main.py` | FastAPI app, background processing loop, audit UI. |
+| **Repositories** | `app/infrastructure/database/repositories.py` | Domain-pure repos: accept/return Pydantic entities, map to ORM internally. New query methods: `get_recent_similar`, `get_past_executed_for_source`. |
+| **Main** | `app/main.py` | FastAPI app, background processing loop, audit UI. LLMAnalyzer wired if `ANTHROPIC_API_KEY` is set. |
 
 ### Key Design Patterns
 - **Hexagonal Architecture**: Infrastructure layer (`app/infrastructure/`) is isolated. Core never imports SQLAlchemy.
 - **Domain-Pure Repositories**: Repos accept/return Pydantic entities. ORM ↔ entity mapping is internal to each repo.
 - **Dependency Injection**: Modules implement interfaces defined in `app.core.interfaces`.
+- **LLM with Structured Output**: `LLMAnalyzer` uses `ChatAnthropic.with_structured_output(_LLMDiagnosisOutput)` (langchain-anthropic) — no `instructor` library. Internal `_LLMDiagnosisOutput` excludes `alert_id`; it is injected post-call.
+- **Graceful Degradation**: `LLMAnalyzer` falls back to `RuleBasedAnalyzer` on any exception. `ContextBuilderService` returns empty history if DB is unreachable.
 - **Structured Logging**: All logs use `extra={...}` for JSON parsing via `pythonjsonlogger`.
 - **AsyncIO**: The main processing loop is non-blocking.
 - **Safe Metadata Formatting**: `rules.py` uses `defaultdict` + `format_map` to prevent `KeyError` on missing metadata keys.
@@ -65,6 +71,9 @@
 | `AUTO_APPROVE_MODERATE_ACTIONS` | `True` | If True, MODERATE-risk actions (RESTART, SCALE_UP) execute without human approval. SAFE actions are always auto-approved. CRITICAL always requires approval. |
 | `AUDIT_FILE_PATH` | `audit.log` | Path to the JSONL audit log file. |
 | `LOG_LEVEL` | `INFO` | Root logging level. |
+| `ANTHROPIC_API_KEY` | `""` | API key for Claude. If empty, system runs rule-based only. |
+| `LLM_MODEL` | `claude-sonnet-4-6` | Claude model ID used by `LLMAnalyzer`. |
+| `DATABASE_URL` | `postgresql+asyncpg://...` | Async PostgreSQL URL for `ContextBuilderService` and repositories. |
 
 ---
 
@@ -113,13 +122,38 @@
 5. **Verification**: 3/3 tests passing, 0 warnings after all changes. JSONL `AuditService` untouched and coexists with new `PostgresAuditService`.
 6. **Note on `alembic upgrade head`**: Requires Docker Desktop running first (`docker-compose up -d`).
 
+### Session 4: Phase 2b — LLM Brain (Feb 27, 2026)
+1. **Design Review**: Read `PHASE_2B_LLM_BRAIN_DESIGN.md` and identified 3 mandatory corrections before implementation.
+2. **Corrections applied to design before coding**:
+   - No `instructor` library: replaced with `langchain-anthropic` + `with_structured_output(_LLMDiagnosisOutput)`.
+   - Correct model: `claude-sonnet-4-6` (configurable via `LLM_MODEL` setting).
+   - `RuleBasedAnalyzer.analyze()` updated to accept `EnrichedContext` (uses `context.alert` internally).
+3. **Entities updated** (`app/core/entities.py`):
+   - `Diagnosis`: added `alternative_hypotheses: List[str]`, `reasoning_trace: str = ""`, `Field(ge=0.0, le=1.0)` on `confidence`.
+   - `EnrichedContext`: new entity with `alert`, `recent_similar_incidents`, `past_remediations_for_source`.
+4. **`IAnalysisModule` contract updated** (`app/core/interfaces.py`): `analyze(context: EnrichedContext)` replaces `analyze(alert: Alert)`.
+5. **`RuleBasedAnalyzer` updated** (`app/modules/analysis/engine.py`): new signature, uses `context.alert` internally.
+6. **Repositories extended** (`app/infrastructure/database/repositories.py`):
+   - `IncidentRepository.get_recent_similar(source, severity, hours=24)`.
+   - `PlanRepository.get_past_executed_for_source(source, limit=5)`.
+   - `_to_entity()` helpers added to both repos.
+7. **New files created**:
+   - `app/modules/context/__init__.py` + `app/modules/context/builder.py` — `ContextBuilderService`.
+   - `app/modules/analysis/llm_analyzer.py` — `LLMAnalyzer` with `_LLMDiagnosisOutput` internal schema and graceful fallback.
+8. **`main.py` updated**: wires `ContextBuilderService` + `LLMAnalyzer` (active if `ANTHROPIC_API_KEY` set, else rule engine).
+9. **`config.py` updated**: `ANTHROPIC_API_KEY`, `LLM_MODEL`, `DATABASE_URL` settings added.
+10. **`requirements.txt` updated**: added `langchain>=0.3.0`, `langchain-core>=0.3.0`, `langchain-anthropic>=0.3.0`.
+11. **`pytest.ini` created**: sets `asyncio_mode = strict`; suppresses third-party Python 3.14 `UserWarning` from `langchain_core`.
+12. **Tests**: updated `test_analysis.py` to use `EnrichedContext`; added `test_llm_analyzer.py` (2 fallback tests).
+13. **Verification**: 5/5 tests passing, 0 warnings.
+
 ---
 
 ## 🛣️ Active Roadmap (Next Steps)
 
 **Phase 2 — Progress:**
 1. [x] **Persistence Layer**: SQLAlchemy 2.0 + Alembic + Docker Compose. Run `docker-compose up -d && alembic upgrade head` to activate.
-2. [ ] **LLM Brain**: Replace/augment `RuleBasedAnalyzer` with LangChain + Claude API for semantic Root Cause Analysis.
+2. [x] **LLM Brain**: `LLMAnalyzer` (LangChain + Claude API) with `ContextBuilderService`. Set `ANTHROPIC_API_KEY` in `.env` to activate.
 3. [ ] **LangGraph Orchestration**: Refactor the `process_alert` loop into a proper LangGraph agent graph.
 4. [ ] **Real Ingestion**: Add a webhook endpoint to receive alerts from Prometheus/Grafana/Datadog.
 5. [ ] **Human Approval Workflow**: API endpoints + minimal UI for approving/rejecting CRITICAL plans.

@@ -14,3 +14,8 @@ alembic>=1.13.0
 asyncpg>=0.29.0
 aiosqlite>=0.20.0
 psycopg2-binary>=2.9.9
+
+# Phase 2b — LLM Brain
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-anthropic>=0.3.0

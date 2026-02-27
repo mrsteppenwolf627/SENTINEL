@@ -25,5 +25,12 @@ class Settings(BaseSettings):
     # are auto-executed without human approval. SAFE-risk actions are always auto-approved.
     AUTO_APPROVE_MODERATE_ACTIONS: bool = True
 
+    # LLM Brain (Phase 2b)
+    ANTHROPIC_API_KEY: str = ""
+    LLM_MODEL: str = "claude-sonnet-4-6"
+
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgrespassword@localhost:5432/sentinel"
+
 
 settings = Settings()

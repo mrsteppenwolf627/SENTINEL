@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, AsyncIterator
-from .entities import Alert, Diagnosis, RemediationPlan, AuditLog, ActionType, RiskLevel
+from .entities import Alert, Diagnosis, RemediationPlan, AuditLog, ActionType, RiskLevel, EnrichedContext
 
 class IIngestionModule(ABC):
     """Interface for Ingestion Modules (e.g., Simulator, Webhook API)."""
@@ -12,10 +12,10 @@ class IIngestionModule(ABC):
 
 class IAnalysisModule(ABC):
     """Interface for RCA Analysis (e.g., Rule Engine, LLM)."""
-    
+
     @abstractmethod
-    async def analyze(self, alert: Alert) -> Diagnosis:
-        """Analyze an alert and produce a diagnosis."""
+    async def analyze(self, context: EnrichedContext) -> Diagnosis:
+        """Analyze an enriched context and produce a diagnosis."""
         pass
 
 class IPolicyModule(ABC):

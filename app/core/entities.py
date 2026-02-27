@@ -34,7 +34,9 @@ class Alert(BaseModel):
 class Diagnosis(BaseModel):
     alert_id: str
     root_cause: str
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
+    alternative_hypotheses: List[str] = Field(default_factory=list)
+    reasoning_trace: str = ""
     suggested_actions: List[ActionType]
 
 class RemediationPlan(BaseModel):
@@ -56,6 +58,13 @@ class Incident(BaseModel):
     status: Literal["OPEN", "ANALYZING", "MITIGATING", "CLOSED"] = "OPEN"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     closed_at: Optional[datetime] = None
+
+class EnrichedContext(BaseModel):
+    """Data object containing the original alert and historical DB context."""
+    alert: Alert
+    recent_similar_incidents: List[Incident] = Field(default_factory=list)
+    past_remediations_for_source: List[RemediationPlan] = Field(default_factory=list)
+
 
 class AuditLog(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

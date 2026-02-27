@@ -11,3 +11,5 @@ logs/
 audit.log
 audit.db
 .vscode/
+.claude/
+.venv/
